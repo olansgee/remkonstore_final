@@ -8,8 +8,20 @@ if (!is_logged_in() || !has_role('admin')) {
     exit();
 }
 
+// Handle flash messages for PRG pattern
+if (isset($_SESSION['flash_message'])) {
+    $flash_message = $_SESSION['flash_message'];
+    unset($_SESSION['flash_message']);
+    if ($flash_message['type'] === 'success') {
+        $success = $flash_message['text'];
+    } else {
+        $error = $flash_message['text'];
+    }
+}
+
 // Handle form submissions
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $should_redirect = false;
     // Store Management
     if (isset($_POST['add_store'])) {
         $store_name = $conn->real_escape_string($_POST['store_name']);

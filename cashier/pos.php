@@ -455,66 +455,53 @@ $customers_result = $conn->query("SELECT id, name, phone FROM customers ORDER BY
 
         const refreshProductData = async () => {
             const result = await apiRequest('../api/get_products.php?status=all', 'GET');
-            if (!result || !result.success) return;
 
-            const productGrid = document.getElementById('products-grid');
-            const existingCards = {};
-            productGrid.querySelectorAll('.product-card').forEach(card => {
-                existingCards[card.dataset.productId] = card;
-            });
+            if (!result || !result.success || !Array.isArray(result.products)) {
+                console.error("Failed to refresh product data or invalid format received.");
+                return;
+            }
 
-            const receivedProductIds = new Set();
+            const productsById = new Map(result.products.map(p => [p.id.toString(), p]));
 
-            result.products.forEach(product => {
-                receivedProductIds.add(product.id.toString());
-                const card = existingCards[product.id];
+            document.querySelectorAll('.product-card').forEach(card => {
+                const productId = card.dataset.productId;
+                const productData = productsById.get(productId);
 
-                const stockStatusClass = product.stock_quantity > 0 ? 'in-stock' : 'out-of-stock';
-                const stockStatusText = product.stock_quantity > 0 ? `${product.stock_quantity} in stock` : 'Out of Stock';
-
-                if (card) {
-                    // Update existing card
-                    const stockEl = card.querySelector('.product-stock');
+                if (productData) {
+                    // Update Stock
                     const oldStock = parseInt(card.dataset.stockQuantity, 10);
+                    const newStock = parseInt(productData.stock_quantity, 10);
 
-                    if (oldStock !== product.stock_quantity) {
-                        card.dataset.stockQuantity = product.stock_quantity;
-                        stockEl.textContent = stockStatusText;
-                        stockEl.className = `product-stock ${stockStatusClass}`;
-                        if (product.stock_quantity > 0) {
+                    if (oldStock !== newStock) {
+                        card.dataset.stockQuantity = newStock;
+                        const stockEl = card.querySelector('.product-stock');
+
+                        if (newStock > 0) {
+                            stockEl.textContent = `${newStock} in stock`;
+                            stockEl.className = 'product-stock in-stock';
                             card.classList.remove('out-of-stock');
+                            card.style.display = '';
                         } else {
+                            stockEl.textContent = 'Out of Stock';
+                            stockEl.className = 'product-stock out-of-stock';
                             card.classList.add('out-of-stock');
+                            card.style.display = 'none';
                         }
                     }
-                } else {
-                    // New product, add it to the grid if it's in stock
-                    if (product.stock_quantity > 0) {
-                        const productCard = document.createElement('div');
-                        productCard.className = 'product-card';
-                        productCard.dataset.productId = product.id;
-                        productCard.dataset.productName = product.product_name;
-                        productCard.dataset.productPrice = product.price;
-                        productCard.dataset.costPrice = product.cost_price;
-                        productCard.dataset.stockQuantity = product.stock_quantity;
-                        productCard.dataset.piecesPerCarton = product.pieces_per_carton || 1;
 
-                        productCard.innerHTML = `
-                            <div class="product-name">${product.product_name}</div>
-                            <div class="product-price">Ref Price: ₦${parseFloat(product.price).toFixed(2)}</div>
-                            <div class="product-stock ${stockStatusClass}">${stockStatusText}</div>
-                        `;
-                        productGrid.appendChild(productCard);
+                    // Update Price
+                    const oldPrice = parseFloat(card.dataset.productPrice);
+                    const newPrice = parseFloat(productData.price);
+
+                    if (oldPrice !== newPrice) {
+                        card.dataset.productPrice = newPrice;
+                        const priceEl = card.querySelector('.product-price');
+                        if (priceEl) {
+                            priceEl.textContent = `Ref Price: ₦${newPrice.toFixed(2)}`;
+                        }
                     }
                 }
             });
-
-            // Remove deleted products
-            for (const productId in existingCards) {
-                if (!receivedProductIds.has(productId)) {
-                    existingCards[productId].remove();
-                }
-            }
         };
 
         const loadMoreBtn = document.getElementById('load-more-btn');
