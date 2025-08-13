@@ -546,6 +546,12 @@ if (isset($_GET['edit_order'])) {
         .delete-btn:hover {
             background: #c0392b;
         }
+
+        .action-btn.disabled {
+            background-color: var(--gray) !important;
+            cursor: not-allowed;
+            pointer-events: none;
+        }
         
         .notification {
             padding: 15px;
@@ -942,12 +948,18 @@ if (isset($_GET['edit_order'])) {
                                                 </span>
                                             </td>
                                             <td class="action-cell">
-                                                <a href="?edit_order=<?php echo $order['id']; ?>" class="action-btn edit-btn">
+                                                <?php
+                                                    $is_supplied = $order['delivery_status'] === 'supplied';
+                                                ?>
+                                                <a href="<?php echo $is_supplied ? '#' : '?edit_order=' . $order['id']; ?>"
+                                                   class="action-btn edit-btn <?php if ($is_supplied) echo 'disabled'; ?>"
+                                                   <?php if ($is_supplied) echo 'onclick="return false;"'; ?>>
                                                     <i class="fas fa-edit"></i> Edit
                                                 </a>
-                                                <a href="?delete_order=<?php echo $order['id']; ?>" class="action-btn delete-btn" 
-                                                   onclick="return confirm('Are you sure you want to delete this order?');">
-                                                    <i class="fas fa-trash"></i> 
+                                                <a href="<?php echo $is_supplied ? '#' : '?delete_order=' . $order['id']; ?>"
+                                                   class="action-btn delete-btn <?php if ($is_supplied) echo 'disabled'; ?>"
+                                                   onclick="<?php echo $is_supplied ? 'return false;' : 'return confirm(\'Are you sure you want to delete this order?\');'; ?>">
+                                                    <i class="fas fa-trash"></i> Delete
                                                 </a>
                                             </td>
                                         </tr>

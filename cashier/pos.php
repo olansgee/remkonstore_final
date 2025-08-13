@@ -30,7 +30,7 @@ if (isset($_SESSION['store_id'])) {
 }
 $_SESSION['store_name'] = $store_name;
 
-$products_result = $conn->query("SELECT id, product_name, price, cost_price, stock_quantity, barcode, pieces_per_carton FROM products ORDER BY stock_quantity > 0 DESC, product_name ASC");
+$products_result = $conn->query("SELECT id, product_name, price, cost_price, stock_quantity, barcode, pieces_per_carton FROM products WHERE stock_quantity > 0 ORDER BY product_name ASC");
 $customers_result = $conn->query("SELECT id, name, phone FROM customers ORDER BY name ASC");
 
 ?>
@@ -96,6 +96,7 @@ $customers_result = $conn->query("SELECT id, name, phone FROM customers ORDER BY
         .btn { padding: 12px 20px; border-radius: 8px; font-size: 1rem; font-weight: 600; cursor: pointer; border: none; }
         .btn-success { background: var(--success); color: white; flex-grow: 1; }
         .btn-danger { background: var(--danger); color: white; }
+        .btn-primary { background: var(--primary); color: white; }
 
         .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: none; justify-content: center; align-items: center; z-index: 1000; }
         .modal-content { background: white; padding: 30px; border-radius: 15px; width: 90%; max-width: 550px; }
@@ -155,6 +156,9 @@ $customers_result = $conn->query("SELECT id, name, phone FROM customers ORDER BY
                             <?php endwhile; ?>
                         <?php endif; ?>
                     </div>
+                    <div style="text-align: center; margin-top: 20px;">
+                        <button id="load-more-btn" class="btn btn-primary">Load Out of Stock Products</button>
+                    </div>
                 </div>
                 <div class="cart-container">
                     <div class="cart-header"><h2><i class="fas fa-shopping-cart"></i> Current Sale</h2></div>
@@ -194,10 +198,25 @@ $customers_result = $conn->query("SELECT id, name, phone FROM customers ORDER BY
             <div class="modal-body">
                 <p>Cost Price: <strong id="modal-cost-price"></strong></p>
                 <div class="quantity-grid">
-                    <div class="form-group"><label for="modal-carton-quantity">Quantity (ctn)</label><input type="number" id="modal-carton-quantity" class="form-control" value="0" min="0"></div>
-                    <div class="form-group"><label for="modal-piece-quantity">Quantity (pcs)</label><input type="number" id="modal-piece-quantity" class="form-control" value="1" min="0"></div>
+                    <div class="form-group">
+                        <label for="modal-carton-quantity">Quantity (ctn)</label>
+                        <input type="number" id="modal-carton-quantity" class="form-control" value="0" min="0">
+                    </div>
+                    <div class="form-group">
+                        <label for="modal-carton-price">Price (per ctn)</label>
+                        <input type="number" id="modal-carton-price" class="form-control" step="0.01" min="0">
+                    </div>
                 </div>
-                <div class="form-group"><label for="modal-price">Selling Price (per piece)</label><input type="number" id="modal-price" class="form-control" step="0.01" min="0"></div>
+                <div class="quantity-grid">
+                    <div class="form-group">
+                        <label for="modal-piece-quantity">Quantity (pcs)</label>
+                        <input type="number" id="modal-piece-quantity" class="form-control" value="1" min="0">
+                    </div>
+                    <div class="form-group">
+                        <label for="modal-piece-price">Price (per pc)</label>
+                        <input type="number" id="modal-piece-price" class="form-control" step="0.01" min="0">
+                    </div>
+                </div>
             </div>
             <div class="modal-footer"><button class="btn btn-secondary modal-close">Cancel</button><button id="add-to-cart-btn" class="btn btn-primary">Add to Cart</button></div>
         </div>
@@ -266,14 +285,53 @@ $customers_result = $conn->query("SELECT id, name, phone FROM customers ORDER BY
         const addToCart = async () => {
             const cartonQty = parseInt(document.getElementById('modal-carton-quantity').value, 10) || 0;
             const pieceQty = parseInt(document.getElementById('modal-piece-quantity').value, 10) || 0;
-            const price = parseFloat(document.getElementById('modal-price').value);
-            const totalQuantity = (cartonQty * currentProduct.piecesPerCarton) + pieceQty;
-            if (totalQuantity <= 0 || isNaN(price) || price <= 0) {
-                alert('Please enter a valid quantity and price.');
+
+            const cartonPrice = parseFloat(document.getElementById('modal-carton-price').value);
+            const piecePrice = parseFloat(document.getElementById('modal-piece-price').value);
+
+            if (cartonQty <= 0 && pieceQty <= 0) {
+                alert('Please enter a quantity.');
                 return;
             }
-            const result = await apiRequest('../api/cart.php', 'POST', { id: currentProduct.id, name: currentProduct.name, quantity: totalQuantity, price: price });
-            if (result && result.success) {
+
+            let addedSomething = false;
+
+            if (cartonQty > 0) {
+                if (isNaN(cartonPrice) || cartonPrice <= 0) {
+                    alert('Please enter a valid price for cartons.');
+                } else {
+                    const pricePerPieceFromCarton = cartonPrice / currentProduct.piecesPerCarton;
+                    const totalQuantityFromCarton = cartonQty * currentProduct.piecesPerCarton;
+
+                    const result = await apiRequest('../api/cart.php', 'POST', {
+                        id: currentProduct.id,
+                        name: `${currentProduct.name} (Carton)`,
+                        quantity: totalQuantityFromCarton,
+                        price: pricePerPieceFromCarton
+                    });
+                    if (result && result.success) {
+                        addedSomething = true;
+                    }
+                }
+            }
+
+            if (pieceQty > 0) {
+                if (isNaN(piecePrice) || piecePrice <= 0) {
+                    alert('Please enter a valid price for pieces.');
+                } else {
+                    const result = await apiRequest('../api/cart.php', 'POST', {
+                        id: currentProduct.id,
+                        name: `${currentProduct.name} (Piece)`,
+                        quantity: pieceQty,
+                        price: piecePrice
+                    });
+                    if (result && result.success) {
+                        addedSomething = true;
+                    }
+                }
+            }
+
+            if (addedSomething) {
                 updateCartDisplay();
                 posModal.style.display = 'none';
             }
@@ -347,6 +405,7 @@ $customers_result = $conn->query("SELECT id, name, phone FROM customers ORDER BY
         updateCartDisplay();
         updateClock();
         setInterval(updateClock, 1000);
+        setInterval(refreshProductData, 30000); // Refresh products every 30 seconds
         function updateClock() {
             const now = new Date();
             document.getElementById('live-time').innerText = now.toLocaleTimeString();
@@ -394,13 +453,116 @@ $customers_result = $conn->query("SELECT id, name, phone FROM customers ORDER BY
             });
         });
 
+        const refreshProductData = async () => {
+            const result = await apiRequest('../api/get_products.php?status=all', 'GET');
+            if (!result || !result.success) return;
+
+            const productGrid = document.getElementById('products-grid');
+            const existingCards = {};
+            productGrid.querySelectorAll('.product-card').forEach(card => {
+                existingCards[card.dataset.productId] = card;
+            });
+
+            const receivedProductIds = new Set();
+
+            result.products.forEach(product => {
+                receivedProductIds.add(product.id.toString());
+                const card = existingCards[product.id];
+
+                const stockStatusClass = product.stock_quantity > 0 ? 'in-stock' : 'out-of-stock';
+                const stockStatusText = product.stock_quantity > 0 ? `${product.stock_quantity} in stock` : 'Out of Stock';
+
+                if (card) {
+                    // Update existing card
+                    const stockEl = card.querySelector('.product-stock');
+                    const oldStock = parseInt(card.dataset.stockQuantity, 10);
+
+                    if (oldStock !== product.stock_quantity) {
+                        card.dataset.stockQuantity = product.stock_quantity;
+                        stockEl.textContent = stockStatusText;
+                        stockEl.className = `product-stock ${stockStatusClass}`;
+                        if (product.stock_quantity > 0) {
+                            card.classList.remove('out-of-stock');
+                        } else {
+                            card.classList.add('out-of-stock');
+                        }
+                    }
+                } else {
+                    // New product, add it to the grid if it's in stock
+                    if (product.stock_quantity > 0) {
+                        const productCard = document.createElement('div');
+                        productCard.className = 'product-card';
+                        productCard.dataset.productId = product.id;
+                        productCard.dataset.productName = product.product_name;
+                        productCard.dataset.productPrice = product.price;
+                        productCard.dataset.costPrice = product.cost_price;
+                        productCard.dataset.stockQuantity = product.stock_quantity;
+                        productCard.dataset.piecesPerCarton = product.pieces_per_carton || 1;
+
+                        productCard.innerHTML = `
+                            <div class="product-name">${product.product_name}</div>
+                            <div class="product-price">Ref Price: ₦${parseFloat(product.price).toFixed(2)}</div>
+                            <div class="product-stock ${stockStatusClass}">${stockStatusText}</div>
+                        `;
+                        productGrid.appendChild(productCard);
+                    }
+                }
+            });
+
+            // Remove deleted products
+            for (const productId in existingCards) {
+                if (!receivedProductIds.has(productId)) {
+                    existingCards[productId].remove();
+                }
+            }
+        };
+
+        const loadMoreBtn = document.getElementById('load-more-btn');
+        if (loadMoreBtn) {
+            loadMoreBtn.addEventListener('click', async () => {
+                loadMoreBtn.disabled = true;
+                loadMoreBtn.textContent = 'Loading...';
+                const result = await apiRequest('../api/get_products.php?status=out-of-stock', 'GET');
+                if (result && result.success && result.products.length > 0) {
+                    const productGrid = document.getElementById('products-grid');
+                    result.products.forEach(product => {
+                        const productCard = document.createElement('div');
+                        productCard.className = 'product-card out-of-stock';
+                        productCard.dataset.productId = product.id;
+                        productCard.dataset.productName = product.product_name;
+                        productCard.dataset.productPrice = product.price;
+                        productCard.dataset.costPrice = product.cost_price;
+                        productCard.dataset.stockQuantity = product.stock_quantity;
+                        productCard.dataset.piecesPerCarton = product.pieces_per_carton || 1;
+
+                        productCard.innerHTML = `
+                            <div class="product-name">${product.product_name}</div>
+                            <div class="product-price">Ref Price: ₦${parseFloat(product.price).toFixed(2)}</div>
+                            <div class="product-stock out-of-stock">Out of Stock</div>
+                        `;
+                        productGrid.appendChild(productCard);
+                    });
+                    loadMoreBtn.style.display = 'none'; // Hide button after loading
+                } else {
+                    alert('No out-of-stock products to load.');
+                    loadMoreBtn.style.display = 'none';
+                }
+            });
+        }
+
         function openPosModal(productCard) {
             currentProduct = { id: productCard.dataset.productId, name: productCard.dataset.productName, defaultPrice: parseFloat(productCard.dataset.productPrice), costPrice: parseFloat(productCard.dataset.costPrice), piecesPerCarton: parseInt(productCard.dataset.piecesPerCarton, 10) || 1 };
             document.getElementById('modal-product-name').textContent = currentProduct.name;
             document.getElementById('modal-cost-price').textContent = `₦${currentProduct.costPrice.toFixed(2)}`;
             document.getElementById('modal-carton-quantity').value = 0;
             document.getElementById('modal-piece-quantity').value = 1;
-            document.getElementById('modal-price').value = currentProduct.defaultPrice.toFixed(2);
+
+            const piecePrice = currentProduct.defaultPrice;
+            const cartonPrice = piecePrice * currentProduct.piecesPerCarton;
+
+            document.getElementById('modal-piece-price').value = piecePrice.toFixed(2);
+            document.getElementById('modal-carton-price').value = cartonPrice.toFixed(2);
+
             posModal.style.display = 'flex';
         }
     });
